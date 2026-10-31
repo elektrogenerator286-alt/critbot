@@ -58,8 +58,10 @@ public class CritBotClient implements ClientModInitializer {
         double dist = p.distanceTo(target);
         faceTarget(p, target);
 
-        // ---- auto-dodge: sidestep perpendicular to the threat when it gets close ----
-        if (dist < THREAT_RANGE && dodgeCd == 0 && p.onGround()) {
+        // ---- auto-dodge: sidestep when a player aimed at us is within reach ----
+        // Dodge only entities that can actually miss (players); mobs are ignored for dodging.
+        if (target instanceof Player && dist < THREAT_RANGE && dodgeCd == 0 && p.onGround()
+                && isLookingAt(target, p)) {
             Vec3 toThreat = target.position().subtract(p.position()).multiply(1, 0, 1).normalize();
             Vec3 side = new Vec3(-toThreat.z, 0, toThreat.x).scale(dodgeDir);
             p.setDeltaMovement(p.getDeltaMovement().add(side.scale(0.55)).add(0, 0.0, 0));
@@ -67,13 +69,13 @@ public class CritBotClient implements ClientModInitializer {
             dodgeCd = DODGE_COOLDOWN;
         }
 
-        // ---- auto-crit: jump, then hit on the way down with a charged weapon ----
+        // ---- crits only: we attack ONLY when the hit is a guaranteed critical (never a normal hit) ----
         if (dist <= REACH + 0.5) {
             if (p.onGround() && dodgeCd < DODGE_COOLDOWN - 3) {
                 p.jumpFromGround();
             }
             boolean canCrit = !p.onGround() && p.fallDistance > 0.0F && p.getDeltaMovement().y < 0
-                    && !p.onClimbable() && !p.isInWater() && !p.isPassenger()
+                    && !p.onClimbable() && !p.isInWater() && !p.isPassenger() && !p.isSprinting()
                     && !p.hasEffect(net.minecraft.world.effect.MobEffects.BLINDNESS);
             if (canCrit && p.getAttackStrengthScale(0.5F) >= 0.95F && dist <= REACH) {
                 mc.gameMode.attack(p, target);
@@ -89,6 +91,13 @@ public class CritBotClient implements ClientModInitializer {
                                 && (e instanceof Monster || e instanceof Player)
                                 && wearsNetherite(e) && p.hasLineOfSight(e))
                 .stream().min(Comparator.comparingDouble(p::distanceToSqr)).orElse(null);
+    }
+
+    /** True if 'viewer' is aiming roughly at 'me' (so its swing could land on us). */
+    private static boolean isLookingAt(LivingEntity viewer, LocalPlayer me) {
+        Vec3 look = viewer.getLookAngle().normalize();
+        Vec3 to = me.getEyePosition().subtract(viewer.getEyePosition()).normalize();
+        return look.dot(to) > 0.8;
     }
 
     /** True if the entity wears or holds anything netherite (armor, sword, axe, ...). */
