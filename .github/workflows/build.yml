@@ -17,7 +17,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 9.2.0
-      - run: gradle build --no-daemon
+      - name: Build
+        run: |
+          set +e
+          gradle build --no-daemon > build.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            grep -nE "error:|What went wrong|Could not|FAILED|Caused by|not found|cannot find" -A2 build.log | head -40 | sed -e ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g' | while read -r l; do echo "::error title=build-log::$l"; done
+          fi
+          exit $code
       - uses: actions/upload-artifact@v4
         with:
           name: critbot-jar
